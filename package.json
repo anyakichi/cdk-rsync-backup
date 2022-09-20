@@ -1,0 +1,31 @@
+{
+  "name": "cdk-rsync-backup",
+  "version": "0.1.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "format": "prettier --ignore-path .gitignore -w lib"
+  },
+  "devDependencies": {
+    "@trivago/prettier-plugin-sort-imports": "^3.3.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "10.17.27",
+    "@types/prettier": "2.6.0",
+    "aws-cdk-lib": "2.41.0",
+    "constructs": "^10.0.0",
+    "jest": "^27.5.1",
+    "ts-jest": "^27.1.4",
+    "typescript": "~3.9.7"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "2.41.0",
+    "constructs": "^10.0.0"
+  },
+  "dependencies": {
+    "cdk-ec2-key-pair": "^3.3.1",
+    "prettier": "^2.7.1"
+  }
+}

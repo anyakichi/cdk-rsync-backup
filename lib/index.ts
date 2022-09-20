@@ -1,0 +1,108 @@
+import * as cdk from "aws-cdk-lib";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import { KeyPair } from "cdk-ec2-key-pair";
+import { Construct } from "constructs";
+import * as path from "path";
+
+export interface RsyncBackupProps {
+  readonly securityGroup?: ec2.ISecurityGroup;
+  readonly vpc?: ec2.IVpc;
+  readonly keyName?: string;
+
+  readonly logsBucket?: s3.IBucket;
+}
+
+export class RsyncBackup extends Construct {
+  constructor(scope: Construct, id: string, props: RsyncBackupProps = {}) {
+    super(scope, id);
+
+    const bucket =
+      props.logsBucket ||
+      new s3.Bucket(this, "LogsBucket", {
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      });
+
+    const vpc =
+      props.vpc || cdk.aws_ec2.Vpc.fromLookup(this, "VPC", { isDefault: true });
+
+    const securityGroup = new ec2.SecurityGroup(this, "SecurityGroup", {
+      vpc,
+      allowAllOutbound: true,
+    });
+
+    securityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(22),
+      "Allow SSH Access"
+    );
+
+    const ami = new ec2.AmazonLinuxImage({
+      generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
+      cpuType: ec2.AmazonLinuxCpuType.ARM_64,
+    });
+
+    const policy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          actions: [
+            "ec2:DescribeInstances",
+            "ec2:DescribeSnapshots",
+            "ec2:DescribeVolumes",
+            "ec2:DescribeVolumeStatus",
+            "ec2:AttachVolume",
+            "ec2:DetachVolume",
+            "ec2:CreateVolume",
+            "ec2:DeleteVolume",
+            "ec2:CreateSnapshot",
+            "ec2:CreateTags",
+          ],
+          resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          actions: ["s3:PutObject", "s3:PutObjectAcl"],
+          resources: [bucket.bucketArn, bucket.bucketArn + "/*"],
+        }),
+      ],
+    });
+
+    const role = new iam.Role(this, "InstanceRole", {
+      assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
+      inlinePolicies: {
+        rsyncBackup: policy,
+      },
+    });
+
+    let keyName: string;
+    let key: KeyPair | undefined;
+    if (props.keyName) {
+      keyName = props.keyName;
+    } else {
+      key = new KeyPair(this, "KeyPair", {
+        name: "rsync-backup",
+      });
+      keyName = key.keyPairName;
+    }
+
+    const instance = new ec2.Instance(this, "RsyncBackup", {
+      vpc,
+      instanceType: ec2.InstanceType.of(
+        ec2.InstanceClass.T4G,
+        ec2.InstanceSize.NANO
+      ),
+      machineImage: ami,
+      securityGroup: securityGroup,
+      keyName: keyName,
+      role: role,
+      init: ec2.CloudFormationInit.fromConfig(
+        new ec2.InitConfig([
+          ec2.InitFile.fromAsset(
+            "/urs/local/bin/rsync-backup",
+            path.join(__dirname, "../src/rsync-backup.sh")
+          ),
+        ])
+      ),
+    });
+  }
+}

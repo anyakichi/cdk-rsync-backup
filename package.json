@@ -1,5 +1,5 @@
 {
-  "name": "cdk-rsync-backup",
+  "name": "@anyakichi/cdk-rsync-backup",
   "description": "AWS CDK L3 construct for cloud backup system with rsync",
   "version": "0.1.0",
   "author": "INAJIMA Daisuke <inajima@gmail.com>",

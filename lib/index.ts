@@ -6,10 +6,21 @@ import { KeyPair } from "cdk-ec2-key-pair";
 import { Construct } from "constructs";
 import * as path from "path";
 
+export interface RsyncBackupModule {
+  readonly name: string;
+  readonly sshKey: string;
+  readonly size: number;
+}
+
 export interface RsyncBackupProps {
+  readonly modules?: RsyncBackupModule[];
+
+  readonly instanceId?: string;
+
   readonly securityGroup?: ec2.ISecurityGroup;
   readonly vpc?: ec2.IVpc;
   readonly keyName?: string;
+  readonly init?: ec2.CloudFormationInit;
 
   readonly logsBucket?: s3.IBucket;
 }
@@ -27,16 +38,21 @@ export class RsyncBackup extends Construct {
     const vpc =
       props.vpc || cdk.aws_ec2.Vpc.fromLookup(this, "VPC", { isDefault: true });
 
-    const securityGroup = new ec2.SecurityGroup(this, "SecurityGroup", {
-      vpc,
-      allowAllOutbound: true,
-    });
+    let securityGroup: ec2.ISecurityGroup;
+    if (props.securityGroup) {
+      securityGroup = props.securityGroup;
+    } else {
+      securityGroup = new ec2.SecurityGroup(this, "SecurityGroup", {
+        vpc,
+        allowAllOutbound: true,
+      });
 
-    securityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(22),
-      "Allow SSH Access"
-    );
+      securityGroup.addIngressRule(
+        ec2.Peer.anyIpv4(),
+        ec2.Port.tcp(22),
+        "Allow SSH Access"
+      );
+    }
 
     const ami = new ec2.AmazonLinuxImage({
       generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
@@ -85,7 +101,87 @@ export class RsyncBackup extends Construct {
       keyName = key.keyPairName;
     }
 
-    const instance = new ec2.Instance(this, "RsyncBackup", {
+    const initConfig = new ec2.InitConfig([
+      ec2.InitFile.fromString(
+        "/etc/environment",
+        `S3_LOGS_BUCKET=${bucket.bucketName}`
+      ),
+      ec2.InitFile.fromAsset(
+        "/usr/local/bin/rsync-backup",
+        path.join(__dirname, "../assets/rsync-backup.sh"),
+        {
+          mode: "000755",
+        }
+      ),
+      ec2.InitFile.fromAsset(
+        "/srv/rsync-backup/rsyncd.inc",
+        path.join(__dirname, "../assets/rsyncd.inc")
+      ),
+    ]);
+
+    if (props.modules) {
+      for (const [i, m] of props.modules.entries()) {
+        if (m.size < 0 || !Number.isInteger(m.size)) {
+          throw new Error("module size must be a positive integer");
+        }
+
+        const device = String.fromCharCode("b".charCodeAt(0) + i);
+
+        initConfig.add(
+          ec2.InitFile.fromAsset(
+            `/srv/rsync-backup/rsyncd.${m.name}.conf`,
+            path.join(__dirname, "../assets/rsyncd.conf")
+          )
+        );
+        initConfig.add(
+          ec2.InitCommand.argvCommand([
+            "/usr/bin/sed",
+            "-i",
+            `s/@host@/${m.name}/g`,
+            `/srv/rsync-backup/rsyncd.${m.name}.conf`,
+          ])
+        );
+        initConfig.add(
+          ec2.InitCommand.shellCommand(
+            `echo 'no-port-forwarding,no-agent-forwarding,no-X11-forwarding,command="rsync-backup ${m.name} ${m.size} /dev/sd${device}" ${m.sshKey}' >> /root/.ssh/authorized_keys`
+          )
+        );
+      }
+    } else {
+      initConfig.add(
+        ec2.InitFile.fromAsset(
+          "/srv/rsync-backup/rsyncd.backup.conf",
+          path.join(__dirname, "../assets/rsyncd.conf")
+        )
+      );
+      initConfig.add(
+        ec2.InitCommand.argvCommand([
+          "/usr/bin/sed",
+          "-i",
+          `s/@host@/backup/g`,
+          `/srv/rsync-backup/rsyncd.backup.conf`,
+        ])
+      );
+      initConfig.add(
+        ec2.InitCommand.argvCommand([
+          "/usr/bin/sed",
+          "-i",
+          's|command=".*" |command="rsync-backup backup 100 /dev/sdb" |',
+          "/root/.ssh/authorized_keys",
+        ])
+      );
+    }
+
+    const init = (() => {
+      if (props.init) {
+        props.init.addConfig("rsyncBackup", initConfig);
+        return props.init;
+      } else {
+        return ec2.CloudFormationInit.fromConfig(initConfig);
+      }
+    })();
+
+    const instance = new ec2.Instance(this, props.instanceId || "RsyncBackup", {
       vpc,
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T4G,
@@ -95,14 +191,7 @@ export class RsyncBackup extends Construct {
       securityGroup: securityGroup,
       keyName: keyName,
       role: role,
-      init: ec2.CloudFormationInit.fromConfig(
-        new ec2.InitConfig([
-          ec2.InitFile.fromAsset(
-            "/urs/local/bin/rsync-backup",
-            path.join(__dirname, "../src/rsync-backup.sh")
-          ),
-        ])
-      ),
+      init: init,
     });
   }
 }

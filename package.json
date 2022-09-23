@@ -1,13 +1,23 @@
 {
   "name": "cdk-rsync-backup",
+  "description": "AWS CDK L3 construct for cloud backup system with rsync",
   "version": "0.1.0",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "author": "INAJIMA Daisuke <inajima@gmail.com>",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w",
+    "format": "prettier --ignore-path .gitignore -w package.json lib",
     "test": "jest",
-    "format": "prettier --ignore-path .gitignore -w lib"
+    "watch": "tsc -w"
+  },
+  "types": "lib/index.d.ts",
+  "main": "lib/index.js",
+  "dependencies": {
+    "cdk-ec2-key-pair": "^3.3.1",
+    "prettier": "^2.7.1"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "2.42.1",
+    "constructs": "^10.0.0"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^3.3.0",
@@ -17,15 +27,11 @@
     "aws-cdk-lib": "2.42.1",
     "constructs": "^10.0.0",
     "jest": "^27.5.1",
+    "prettier-plugin-fixpack": "^0.1.0",
     "ts-jest": "^27.1.4",
     "typescript": "~3.9.7"
   },
-  "peerDependencies": {
-    "aws-cdk-lib": "2.42.1",
-    "constructs": "^10.0.0"
-  },
-  "dependencies": {
-    "cdk-ec2-key-pair": "^3.3.1",
-    "prettier": "^2.7.1"
-  }
+  "homepage": "https://github.com/anyakichi/cdk-rsync-backup",
+  "repository": "https://github.com/anyakichi/cdk-rsync-backup",
+  "license": "MIT"
 }

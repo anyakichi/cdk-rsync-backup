@@ -2,7 +2,6 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import { KeyPair } from "cdk-ec2-key-pair";
 import { Construct } from "constructs";
 import * as path from "path";
 
@@ -90,16 +89,10 @@ export class RsyncBackup extends Construct {
       },
     });
 
-    let keyName: string;
-    let key: KeyPair | undefined;
-    if (props.keyName) {
-      keyName = props.keyName;
-    } else {
-      key = new KeyPair(this, "KeyPair", {
-        name: "rsync-backup",
-      });
-      keyName = key.keyPairName;
-    }
+    const keyPair = new ec2.CfnKeyPair(this, "KeyPair", {
+      keyName: "rsync-backup",
+    });
+    keyPair.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
 
     const initConfig = new ec2.InitConfig([
       ec2.InitFile.fromString(
@@ -181,7 +174,7 @@ export class RsyncBackup extends Construct {
       }
     })();
 
-    const instance = new ec2.Instance(this, props.instanceId || "RsyncBackup", {
+    const instance = new ec2.Instance(this, props.instanceId || "Instance", {
       vpc,
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T4G,
@@ -189,7 +182,7 @@ export class RsyncBackup extends Construct {
       ),
       machineImage: ami,
       securityGroup: securityGroup,
-      keyName: keyName,
+      keyName: cdk.Token.asString(keyPair.ref),
       role: role,
       init: init,
     });

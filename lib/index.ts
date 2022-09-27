@@ -16,9 +16,10 @@ export interface RsyncBackupProps {
 
   readonly instanceId?: string;
 
-  readonly securityGroup?: ec2.ISecurityGroup;
-  readonly vpc?: ec2.IVpc;
   readonly keyName?: string;
+  readonly vpc?: ec2.IVpc;
+  readonly securityGroup?: ec2.ISecurityGroup;
+  readonly instanceType?: ec2.InstanceType;
   readonly init?: ec2.CloudFormationInit;
 
   readonly logsBucket?: s3.IBucket;
@@ -53,7 +54,11 @@ export class RsyncBackup extends Construct {
       );
     }
 
-    const ami = new ec2.AmazonLinuxImage({
+    const instanceType =
+      props.instanceType ||
+      ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO);
+
+    const machineImage = new ec2.AmazonLinuxImage({
       generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
       cpuType: ec2.AmazonLinuxCpuType.ARM_64,
     });
@@ -175,16 +180,13 @@ export class RsyncBackup extends Construct {
     })();
 
     const instance = new ec2.Instance(this, props.instanceId || "Instance", {
-      vpc,
-      instanceType: ec2.InstanceType.of(
-        ec2.InstanceClass.T4G,
-        ec2.InstanceSize.NANO
-      ),
-      machineImage: ami,
-      securityGroup: securityGroup,
       keyName: cdk.Token.asString(keyPair.ref),
-      role: role,
-      init: init,
+      vpc,
+      securityGroup,
+      instanceType,
+      machineImage,
+      role,
+      init,
     });
   }
 }

@@ -60,7 +60,6 @@ export class RsyncBackup extends Construct {
 
     const machineImage = new ec2.AmazonLinuxImage({
       generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
-      cpuType: ec2.AmazonLinuxCpuType.ARM_64,
     });
 
     const policy = new iam.PolicyDocument({

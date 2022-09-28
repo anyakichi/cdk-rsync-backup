@@ -21,6 +21,7 @@ export interface RsyncBackupProps {
   readonly securityGroup?: ec2.ISecurityGroup;
   readonly instanceType?: ec2.InstanceType;
   readonly init?: ec2.CloudFormationInit;
+  readonly useEIP?: boolean;
 
   readonly logsBucket?: s3.IBucket;
 }
@@ -29,7 +30,7 @@ export class RsyncBackup extends Construct {
   constructor(scope: Construct, id: string, props: RsyncBackupProps = {}) {
     super(scope, id);
 
-    const bucket =
+    const logsBucket =
       props.logsBucket ||
       new s3.Bucket(this, "LogsBucket", {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -81,7 +82,7 @@ export class RsyncBackup extends Construct {
         }),
         new iam.PolicyStatement({
           actions: ["s3:PutObject", "s3:PutObjectAcl"],
-          resources: [bucket.bucketArn, bucket.bucketArn + "/*"],
+          resources: [logsBucket.bucketArn, logsBucket.bucketArn + "/*"],
         }),
       ],
     });
@@ -101,7 +102,7 @@ export class RsyncBackup extends Construct {
     const initConfig = new ec2.InitConfig([
       ec2.InitFile.fromString(
         "/etc/environment",
-        `S3_LOGS_BUCKET=${bucket.bucketName}`
+        `S3_LOGS_BUCKET=${logsBucket.bucketName}`
       ),
       ec2.InitFile.fromAsset(
         "/usr/local/bin/rsync-backup",
@@ -187,5 +188,14 @@ export class RsyncBackup extends Construct {
       role,
       init,
     });
+
+    let eip, eIPAssociation;
+    if (props.useEIP) {
+      eip = new ec2.CfnEIP(this, "EIP");
+      eIPAssociation = new ec2.CfnEIPAssociation(this, "EIPAssociation", {
+        eip: eip.ref,
+        instanceId: instance.instanceId,
+    });
+    }
   }
 }

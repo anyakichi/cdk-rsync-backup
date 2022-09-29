@@ -61,6 +61,10 @@ export class RsyncBackup extends Construct {
 
     const machineImage = new ec2.AmazonLinuxImage({
       generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
+      cpuType:
+        instanceType.architecture == ec2.InstanceArchitecture.X86_64
+          ? ec2.AmazonLinuxCpuType.X86_64
+          : ec2.AmazonLinuxCpuType.ARM_64,
     });
 
     const policy = new iam.PolicyDocument({
@@ -195,7 +199,7 @@ export class RsyncBackup extends Construct {
       eIPAssociation = new ec2.CfnEIPAssociation(this, "EIPAssociation", {
         eip: eip.ref,
         instanceId: instance.instanceId,
-    });
+      });
     }
   }
 }

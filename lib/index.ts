@@ -13,6 +13,7 @@ export interface RsyncBackupModule {
 
 export interface RsyncBackupProps {
   readonly modules?: RsyncBackupModule[];
+  readonly maxSnapshots?: number;
 
   readonly instanceId?: string;
 
@@ -30,6 +31,11 @@ export interface RsyncBackupProps {
 export class RsyncBackup extends Construct {
   constructor(scope: Construct, id: string, props: RsyncBackupProps = {}) {
     super(scope, id);
+
+    const maxSnapshots = props.maxSnapshots || 15;
+    if (maxSnapshots < 0 || !Number.isInteger(maxSnapshots)) {
+      throw new Error("maxSnapshots must be a positive integer");
+    }
 
     const logsBucket =
       props.logsBucket ||
@@ -82,6 +88,7 @@ export class RsyncBackup extends Construct {
             "ec2:CreateVolume",
             "ec2:DeleteVolume",
             "ec2:CreateSnapshot",
+            "ec2:DeleteSnapshot",
             "ec2:CreateTags",
           ],
           resources: ["*"],
@@ -108,7 +115,8 @@ export class RsyncBackup extends Construct {
     const initConfig = new ec2.InitConfig([
       ec2.InitFile.fromString(
         "/etc/environment",
-        `S3_LOGS_BUCKET=${logsBucket.bucketName}`
+        `MAX_SNAPSHOTS=${maxSnapshots}
+         S3_LOGS_BUCKET=${logsBucket.bucketName}`.replace(/^\s+/gm, "")
       ),
       ec2.InitFile.fromAsset(
         "/usr/local/bin/rsync-backup",

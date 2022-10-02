@@ -15,8 +15,6 @@ export interface RsyncBackupProps {
   readonly modules?: RsyncBackupModule[];
   readonly maxSnapshots?: number;
 
-  readonly instanceId?: string;
-
   readonly keyName?: string;
   readonly vpc?: ec2.IVpc;
   readonly securityGroup?: ec2.ISecurityGroup;
@@ -193,7 +191,7 @@ export class RsyncBackup extends Construct {
       }
     })();
 
-    const instance = new ec2.Instance(this, props.instanceId || "Instance", {
+    const instance = new ec2.Instance(this, "Instance-0.2.3", {
       keyName: cdk.Token.asString(keyPair.ref),
       vpc,
       securityGroup,

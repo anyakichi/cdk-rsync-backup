@@ -191,7 +191,7 @@ export class RsyncBackup extends Construct {
       }
     })();
 
-    const instance = new ec2.Instance(this, "Instance-0.2.3", {
+    const instance = new ec2.Instance(this, "Instance-0.2.4", {
       keyName: cdk.Token.asString(keyPair.ref),
       vpc,
       securityGroup,

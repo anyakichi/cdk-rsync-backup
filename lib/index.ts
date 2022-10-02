@@ -24,6 +24,7 @@ export interface RsyncBackupProps {
   readonly useEIP?: boolean;
 
   readonly logsBucket?: s3.IBucket;
+  readonly autoDeleteLogs?: boolean;
 }
 
 export class RsyncBackup extends Construct {
@@ -34,6 +35,7 @@ export class RsyncBackup extends Construct {
       props.logsBucket ||
       new s3.Bucket(this, "LogsBucket", {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
+        autoDeleteObjects: props.autoDeleteLogs,
       });
 
     const vpc =

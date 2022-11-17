@@ -27,6 +27,9 @@ export interface RsyncBackupProps {
 }
 
 export class RsyncBackup extends Construct {
+  public readonly logsBucket: s3.IBucket;
+  public readonly instance: ec2.IInstance;
+
   constructor(scope: Construct, id: string, props: RsyncBackupProps = {}) {
     super(scope, id);
 
@@ -209,5 +212,8 @@ export class RsyncBackup extends Construct {
         instanceId: instance.instanceId,
       });
     }
+
+    this.logsBucket = logsBucket;
+    this.instance = instance;
   }
 }

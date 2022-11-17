@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "format": "prettier --ignore-path .gitignore -w package.json lib",
+    "prebuild": "node -p \"'export const LIB_VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > lib/version.ts",
     "test": "jest",
     "watch": "tsc -w"
   },

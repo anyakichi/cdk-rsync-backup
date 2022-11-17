@@ -5,6 +5,8 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import * as path from "path";
 
+import { LIB_VERSION } from "./version";
+
 export interface RsyncBackupModule {
   readonly name: string;
   readonly sshKey: string;
@@ -14,6 +16,8 @@ export interface RsyncBackupModule {
 export interface RsyncBackupProps {
   readonly modules?: RsyncBackupModule[];
   readonly maxSnapshots?: number;
+
+  readonly instanceVersion?: string;
 
   readonly keyName?: string;
   readonly vpc?: ec2.IVpc;
@@ -194,7 +198,11 @@ export class RsyncBackup extends Construct {
       }
     })();
 
-    const instance = new ec2.Instance(this, "Instance-0.2.4", {
+    let instanceId = `Instance-${LIB_VERSION.replace(/\.\d+$/, "")}`;
+    if (props.instanceVersion) {
+      instanceId += `-${props.instanceVersion}`;
+    }
+    const instance = new ec2.Instance(this, instanceId, {
       keyName: cdk.Token.asString(keyPair.ref),
       vpc,
       securityGroup,

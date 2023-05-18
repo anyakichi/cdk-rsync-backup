@@ -72,8 +72,7 @@ export class RsyncBackup extends Construct {
       props.instanceType ||
       ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO);
 
-    const machineImage = new ec2.AmazonLinuxImage({
-      generation: ec2.AmazonLinuxGeneration.AMAZON_LINUX_2,
+    const machineImage = ec2.MachineImage.latestAmazonLinux2023({
       cpuType:
         instanceType.architecture == ec2.InstanceArchitecture.X86_64
           ? ec2.AmazonLinuxCpuType.X86_64

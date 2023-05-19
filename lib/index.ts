@@ -117,6 +117,13 @@ export class RsyncBackup extends Construct {
     keyPair.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
 
     const initConfig = new ec2.InitConfig([
+      ec2.InitCommand.argvCommand([
+        "/usr/sbin/grubby",
+        "--update-kernel",
+        "ALL",
+        "--args",
+        "selinux=0",
+      ]),
       ec2.InitFile.fromString(
         "/etc/environment",
         `MAX_SNAPSHOTS=${maxSnapshots}
@@ -210,6 +217,8 @@ export class RsyncBackup extends Construct {
       role,
       init,
     });
+
+    instance.addUserData("reboot");
 
     let eip, eIPAssociation;
     if (props.useEIP) {

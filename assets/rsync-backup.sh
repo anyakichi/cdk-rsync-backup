@@ -18,7 +18,7 @@ main() {
     local name="backup-$1"
     local mnt="/srv/rsync-backup/mnt/$host"
     local logfile="/srv/rsync-backup/rsync-backup.$host.log"
-    local args logfile_gz s3base snapshot_id timestamp volume_id
+    local args dev logfile_gz s3base snapshot_id timestamp volume_id
     local -a snapshot_ids
 
     timestamp="$(date -u "+%Y%m%dT%H%MZ")"
@@ -60,8 +60,14 @@ main() {
         aws ec2 attach-volume --volume-id "$volume_id" \
             --instance-id "$INSTANCE_ID" --device "$device" &>/dev/null
 
+        if [[ -e /dev/disk/by-id ]]; then
+            dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id/-/}"
+        else
+            dev="${device/sd/xvd}"
+        fi
+
         while true; do
-            if [[ -e $device ]]; then
+            if [[ -e $dev ]]; then
                 break
             fi
             sleep 1
@@ -76,11 +82,11 @@ main() {
 
     mkdir -p "$mnt/$host"
 
-    df -h "$device" >>"$logfile"
+    df -h "$dev" >>"$logfile"
 
     rsync --server --daemon --config="/srv/rsync-backup/rsyncd.$host.conf" .
 
-    df -h "$device" >>"$logfile"
+    df -h "$dev" >>"$logfile"
 
     umount "$mnt"
 

@@ -12,11 +12,15 @@ export interface RsyncBackupModule {
   readonly name: string;
   readonly sshKey: string;
   readonly size: number;
+  readonly fileSystem?: string;
+  readonly mountOptions?: string;
 }
 
 export interface RsyncBackupProps {
   readonly modules?: RsyncBackupModule[];
   readonly maxSnapshots?: number;
+  readonly fileSystem?: string;
+  readonly mountOptions?: string;
 
   readonly instanceVersion?: string;
 
@@ -149,8 +153,10 @@ export class RsyncBackup extends Construct {
       `unzip ${asset_path} -d /srv/rsync-backup`,
       `rm ${asset_path}`,
       "mv /srv/rsync-backup/rsync-backup.sh /usr/local/bin/rsync-backup",
-      `echo MAX_SNAPSHOTS=${maxSnapshots} >> /etc/environment`,
-      `echo S3_LOGS_BUCKET=${logsBucket.bucketName} >> /etc/environment`
+      `echo MAX_SNAPSHOTS=${maxSnapshots} >> /srv/rsync-backup/rsync-backup.sh`,
+      `echo S3_LOGS_BUCKET=${logsBucket.bucketName} >> /srv/rsync-backup/rsync-backup.sh`,
+      `echo FILE_SYSTEM=${props.fileSystem || ''} >> /srv/rsync-backup/rsync-backup.sh`,
+      `echo 'MOUNT_OPTS="${props.mountOptions || ''}"' >> /srv/rsync-backup/rsync-backup.sh`
     );
 
     if (props.modules) {
@@ -159,17 +165,28 @@ export class RsyncBackup extends Construct {
           throw new Error("module size must be a positive integer");
         }
         const device = String.fromCharCode("f".charCodeAt(0) + i);
+        const conf = `/srv/rsync-backup/rsync-backup.${m.name}.sh`;
         instance.userData.addCommands(
           `cp /srv/rsync-backup/rsyncd.conf /srv/rsync-backup/rsyncd.${m.name}.conf`,
           `sed -i 's/@host@/${m.name}/g' /srv/rsync-backup/rsyncd.${m.name}.conf`,
-          `echo 'no-port-forwarding,no-agent-forwarding,no-X11-forwarding,command="rsync-backup ${m.name} ${m.size} /dev/sd${device}" ${m.sshKey}' >> /root/.ssh/authorized_keys`
+          `echo VOLUME_SIZE=${m.size} >> ${conf}`,
+          `echo DEVICE=/dev/sd${device} >> ${conf}`,
+          `echo 'no-port-forwarding,no-agent-forwarding,no-X11-forwarding,command="rsync-backup ${m.name}" ${m.sshKey}' >> /root/.ssh/authorized_keys`
         );
+        if (m.fileSystem != undefined) {
+          instance.userData.addCommands(`echo FILE_SYSTEM=${m.fileSystem} >> ${conf}`);
+        }
+        if (m.mountOptions != undefined) {
+          instance.userData.addCommands(`echo 'MOUNT_OPTS="${m.mountOptions}"' >> ${conf}`);
+        }
       }
     } else {
       instance.userData.addCommands(
         "cp /srv/rsync-backup/rsyncd.conf /srv/rsync-backup/rsyncd.backup.conf",
         "sed -i 's/@host@/backup/g' /srv/rsync-backup/rsyncd.backup.conf",
-        `sed -i 's|command=".*" |command="rsync-backup backup 100 /dev/sdf" |' /root/.ssh/authorized_keys`
+        `echo VOLUME_SIZE=100 >> /srv/rsync-backup/rsync-backup.default.sh`,
+        `echo DEVICE=/dev/sdf >> /srv/rsync-backup/rsync-backup.default.sh`,
+        `sed -i 's|command=".*" |command="rsync-backup backup" |' /root/.ssh/authorized_keys`
       );
     }
     instance.userData.addCommands("rm /srv/rsync-backup/rsyncd.conf");

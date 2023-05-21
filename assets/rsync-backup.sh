@@ -13,13 +13,16 @@ INSTANCE_AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.2
 
 main() {
     local host="$1"
-    local size="$2"
-    local device="$3"
     local name="backup-$1"
     local mnt="/srv/rsync-backup/mnt/$host"
     local logfile="/srv/rsync-backup/rsync-backup.$host.log"
     local args dev logfile_gz s3base snapshot_id timestamp volume_id
     local -a snapshot_ids
+
+    # shellcheck source=/dev/null
+    . "/srv/rsync-backup/rsync-backup.sh"
+    # shellcheck source=/dev/null
+    . "/srv/rsync-backup/rsync-backup.$host.sh"
 
     timestamp="$(date -u "+%Y%m%dT%H%MZ")"
     s3base=s3://$S3_LOGS_BUCKET/RsyncBackupLogs/$(date -u "+%Y/%m/%d")/
@@ -49,7 +52,7 @@ main() {
         if [[ $snapshot_id != None ]]; then
             args+=(--snapshot-id "$snapshot_id")
         else
-            args+=(--size "$size")
+            args+=(--size "$VOLUME_SIZE")
         fi
         volume_id=$(aws ec2 create-volume --availability-zone "$INSTANCE_AZ" \
             --encrypted --volume-type gp3 \
@@ -58,12 +61,12 @@ main() {
 
         aws ec2 wait volume-available --volume-ids "$volume_id"
         aws ec2 attach-volume --volume-id "$volume_id" \
-            --instance-id "$INSTANCE_ID" --device "$device" &>/dev/null
+            --instance-id "$INSTANCE_ID" --device "$DEVICE" &>/dev/null
 
         if [[ -e /dev/disk/by-id ]]; then
             dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id/-/}"
         else
-            dev="${device/sd/xvd}"
+            dev="${DEVICE/sd/xvd}"
         fi
 
         while true; do
@@ -75,18 +78,19 @@ main() {
 
         mkdir -p "$mnt"
         if [[ $snapshot_id == None ]]; then
-            mkfs.ext4 -q "$device"
+            mkfs."${FILE_SYSTEM:-ext4}" -q "$dev" >/dev/null
         fi
-        mount "$device" "$mnt"
+        # shellcheck disable=SC2086
+        mount ${MOUNT_OPTS-} "$dev" "$mnt"
     fi
 
     mkdir -p "$mnt/$host"
 
-    df -h "$dev" >>"$logfile"
+    df -Th "$dev" >>"$logfile"
 
     rsync --server --daemon --config="/srv/rsync-backup/rsyncd.$host.conf" .
 
-    df -h "$dev" >>"$logfile"
+    df -Th "$dev" >>"$logfile"
 
     umount "$mnt"
 

@@ -35,6 +35,8 @@ export class CdkDemoStack extends cdk.Stack {
     // Create `hostname` rsync module with 100 GiB EBS.
     // SSH public key is required per module.
     const rsyncBackup = new RsyncBackup(this, "RsyncBackup", {
+      fileSystem: "btrfs",
+      mountOptions: "-o compress=zstd",
       modules: [
         {
           name: "hostname",
@@ -57,7 +59,7 @@ parameter is ignored.
 When you create a new backup, simply execute rsync.
 
 ```
-# rsync -azAXHS -e 'ssh -i id_rsa' --delete --numeric-ids \
+# rsync -azAXHS -e 'ssh -i id_rsa' --delete --numeric-ids --inplace \
     --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"}
     / root@ec2-XXX-XXX-XXX-XXX.compute-1.amazonaws.com::hostname/
 ```

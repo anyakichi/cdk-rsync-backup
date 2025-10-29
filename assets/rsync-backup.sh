@@ -61,7 +61,7 @@ main() {
             --instance-id "$INSTANCE_ID" --device "$device" &>/dev/null
 
         if [[ -e /dev/disk/by-id ]]; then
-            dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id/-/}"
+            dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${volume_id/-/}_1"
         else
             dev="${device/sd/xvd}"
         fi
@@ -75,9 +75,9 @@ main() {
 
         mkdir -p "$mnt"
         if [[ $snapshot_id == None ]]; then
-            mkfs.ext4 -q "$device"
+            mkfs.ext4 -q "$dev"
         fi
-        mount "$device" "$mnt"
+        mount "$dev" "$mnt"
     fi
 
     mkdir -p "$mnt/$host"

@@ -50,7 +50,10 @@ export class RsyncBackup extends Construct {
       });
 
     const vpc =
-      props.vpc || cdk.aws_ec2.Vpc.fromLookup(this, "VPC", { isDefault: true });
+      props.vpc ||
+      new cdk.aws_ec2.Vpc(this, "Vpc", {
+        ipProtocol: ec2.IpProtocol.DUAL_STACK,
+      });
 
     let securityGroup: ec2.ISecurityGroup;
     if (props.securityGroup) {
@@ -64,7 +67,12 @@ export class RsyncBackup extends Construct {
       securityGroup.addIngressRule(
         ec2.Peer.anyIpv4(),
         ec2.Port.tcp(22),
-        "Allow SSH Access"
+        "Allow SSH Access",
+      );
+      securityGroup.addIngressRule(
+        ec2.Peer.anyIpv6(),
+        ec2.Port.tcp(22),
+        "Allow SSH Access",
       );
     }
 
@@ -77,7 +85,7 @@ export class RsyncBackup extends Construct {
         ? "arm64"
         : "amd64";
     const machineImage = ec2.MachineImage.lookup({
-      name: `ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-${arch}-server-*`,
+      name: `ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-${arch}-server-*`,
       owners: ["099720109477"],
     });
 
@@ -113,8 +121,8 @@ export class RsyncBackup extends Construct {
       },
     });
 
-    const keyPair = new ec2.CfnKeyPair(this, "KeyPair", {
-      keyName: "rsync-backup",
+    const keyPair = new ec2.KeyPair(this, "KeyPair", {
+      keyPairName: "rsync-backup",
     });
     keyPair.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
 
@@ -123,17 +131,22 @@ export class RsyncBackup extends Construct {
       instanceId += `-${props.instanceVersion}`;
     }
     const instance = new ec2.Instance(this, instanceId, {
-      keyName: cdk.Token.asString(keyPair.ref),
+      keyPair,
       vpc,
+      vpcSubnets: {
+        subnetType: ec2.SubnetType.PUBLIC,
+      },
       securityGroup,
       instanceType,
       machineImage,
       role,
+      associatePublicIpAddress: true,
     });
 
     instance.userData.addCommands(
       "apt-get update",
-      "apt-get install -y awscli unzip"
+      "apt-get install -y unzip",
+      "snap install aws-cli --classic",
     );
 
     const rsync_backup_sh = new s3assets.Asset(this, "RsyncBackupSh", {
@@ -150,7 +163,7 @@ export class RsyncBackup extends Construct {
       `rm ${asset_path}`,
       "mv /srv/rsync-backup/rsync-backup.sh /usr/local/bin/rsync-backup",
       `echo MAX_SNAPSHOTS=${maxSnapshots} >> /etc/environment`,
-      `echo S3_LOGS_BUCKET=${logsBucket.bucketName} >> /etc/environment`
+      `echo S3_LOGS_BUCKET=${logsBucket.bucketName} >> /etc/environment`,
     );
 
     if (props.modules) {
@@ -162,14 +175,14 @@ export class RsyncBackup extends Construct {
         instance.userData.addCommands(
           `cp /srv/rsync-backup/rsyncd.conf /srv/rsync-backup/rsyncd.${m.name}.conf`,
           `sed -i 's/@host@/${m.name}/g' /srv/rsync-backup/rsyncd.${m.name}.conf`,
-          `echo 'no-port-forwarding,no-agent-forwarding,no-X11-forwarding,command="rsync-backup ${m.name} ${m.size} /dev/sd${device}" ${m.sshKey}' >> /root/.ssh/authorized_keys`
+          `echo 'no-port-forwarding,no-agent-forwarding,no-X11-forwarding,command="rsync-backup ${m.name} ${m.size} /dev/sd${device}" ${m.sshKey}' >> /root/.ssh/authorized_keys`,
         );
       }
     } else {
       instance.userData.addCommands(
         "cp /srv/rsync-backup/rsyncd.conf /srv/rsync-backup/rsyncd.backup.conf",
         "sed -i 's/@host@/backup/g' /srv/rsync-backup/rsyncd.backup.conf",
-        `sed -i 's|command=".*" |command="rsync-backup backup 100 /dev/sdf" |' /root/.ssh/authorized_keys`
+        `sed -i 's|command=".*" |command="rsync-backup backup 100 /dev/sdf" |' /root/.ssh/authorized_keys`,
       );
     }
     instance.userData.addCommands("rm /srv/rsync-backup/rsyncd.conf");

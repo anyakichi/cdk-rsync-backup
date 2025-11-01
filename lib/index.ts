@@ -53,6 +53,13 @@ export class RsyncBackup extends Construct {
       props.vpc ||
       new cdk.aws_ec2.Vpc(this, "Vpc", {
         ipProtocol: ec2.IpProtocol.DUAL_STACK,
+        natGateways: 0,
+        subnetConfiguration: [
+          {
+            name: "Public",
+            subnetType: ec2.SubnetType.PUBLIC,
+          },
+        ],
       });
 
     let securityGroup: ec2.ISecurityGroup;
@@ -140,7 +147,6 @@ export class RsyncBackup extends Construct {
       instanceType,
       machineImage,
       role,
-      associatePublicIpAddress: true,
     });
 
     instance.userData.addCommands(
@@ -187,11 +193,14 @@ export class RsyncBackup extends Construct {
     }
     instance.userData.addCommands("rm /srv/rsync-backup/rsyncd.conf");
 
-    let eip, eIPAssociation;
+    let eip: ec2.CfnEIP | undefined;
+    let eIPAssociation: ec2.CfnEIPAssociation | undefined;
     if (props.useEIP) {
-      eip = new ec2.CfnEIP(this, "EIP");
+      eip = new ec2.CfnEIP(this, "EIP", {
+        domain: "vpc",
+      });
       eIPAssociation = new ec2.CfnEIPAssociation(this, "EIPAssociation", {
-        eip: eip.ref,
+        allocationId: eip.attrAllocationId,
         instanceId: instance.instanceId,
       });
     }

@@ -57,7 +57,7 @@ parameter is ignored.
 When you create a new backup, simply execute rsync.
 
 ```
-# rsync -azAXHS -e 'ssh -i id_rsa' --delete --numeric-ids \
+# rsync -azAXHS -e 'ssh -i id_rsa' --delete --numeric-ids --inplace \
     --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"}
     / root@ec2-XXX-XXX-XXX-XXX.compute-1.amazonaws.com::hostname/
 ```
@@ -68,7 +68,7 @@ System Manager Parameter Sotre.
 ```
 $ aws ssm get-parameter \
     --name /ec2/keypair/$(aws ec2 describe-key-pairs \
-      --key-names rsync-backup --query "KeyPairs[].KeyPairId" --output text) \
+      --key-names rsync-backup-keypair --query "KeyPairs[].KeyPairId" --output text) \
     --with-decryption --query Parameter.Value --output text
 ```
 

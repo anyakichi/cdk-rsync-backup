@@ -129,7 +129,7 @@ export class RsyncBackup extends Construct {
     });
 
     const keyPair = new ec2.KeyPair(this, "KeyPair", {
-      keyPairName: "rsync-backup",
+      keyPairName: "rsync-backup-keypair",
     });
     keyPair.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
 

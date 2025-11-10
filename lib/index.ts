@@ -118,11 +118,27 @@ export class RsyncBackup extends Construct {
           actions: ["s3:PutObject", "s3:PutObjectAcl"],
           resources: [logsBucket.bucketArn, logsBucket.bucketArn + "/*"],
         }),
+        new iam.PolicyStatement({
+          actions: [
+            "ssm:GetParameter",
+            "ssm:PutParameter",
+            "ssm:AddTagsToResource",
+            "ssm:RemoveTagsFromResource",
+          ],
+          resources: [
+            `arn:aws:ssm:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:parameter/ec2/hostkeys/rsync-backup/*`,
+          ],
+        }),
       ],
     });
 
     const role = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "AmazonSSMManagedInstanceCore",
+        ),
+      ],
       inlinePolicies: {
         rsyncBackup: policy,
       },
@@ -138,6 +154,7 @@ export class RsyncBackup extends Construct {
       instanceId += `-${props.instanceVersion}`;
     }
     const instance = new ec2.Instance(this, instanceId, {
+      instanceName: "rsync-backup",
       keyPair,
       vpc,
       vpcSubnets: {
@@ -154,6 +171,36 @@ export class RsyncBackup extends Construct {
       "apt-get install -y unzip",
       "snap install aws-cli --classic",
     );
+
+    if (props.useEIP) {
+      instance.userData.addCommands(
+        `
+set -euo pipefail
+
+BASE="/ec2/hostkeys/rsync-backup"
+REGION="${cdk.Aws.REGION}"
+
+fetch_param() { aws ssm get-parameter --region "$REGION" --with-decryption --name "$1" --query 'Parameter.Value' --output text 2>/dev/null || true; }
+put_param() { aws ssm put-parameter --region "$REGION" --overwrite --type SecureString  --name "$1" --value "$2" >/dev/null; }
+
+for key in /etc/ssh/ssh_host_*_key; do
+  base="$(basename "$key")"
+  val="$(fetch_param "$BASE/$base")"
+  pub="$(fetch_param "$BASE/$base.pub")"
+  if [ -n "$val" ] && [ -n "$pub" ]; then
+    echo "$val" > "$key"
+    echo "$pub" > "$key.pub"
+  else
+    put_param "$BASE/$base" "$(cat "$key")"
+    put_param "$BASE/$base.pub" "$(cat "$key.pub")"
+  fi
+done
+
+systemctl daemon-reload
+systemctl restart ssh
+`,
+      );
+    }
 
     const rsync_backup_sh = new s3assets.Asset(this, "RsyncBackupSh", {
       path: path.join(__dirname, "../assets"),

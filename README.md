@@ -79,6 +79,23 @@ snapshot, then copy the backup data.
 
 Reading backup data from the backup instance is disabled by default.
 
+### Swap file
+
+Small instance types (e.g. `t4g.nano`) have limited memory and may
+fail under heavy rsync workloads. You can optionally enable a swap
+file on the instance by specifying `swapSize` in GiB. When set, the
+instance creates `/swapfile` on first boot and registers it in
+`/etc/fstab` for automatic activation on subsequent boots.
+
+```typescript
+const rsyncBackup = new RsyncBackup(this, "RsyncBackup", {
+  swapSize: 1, // 1 GiB swap file at /swapfile
+  modules: [
+    /* ... */
+  ],
+});
+```
+
 ## Recommended workflow
 
 Backup data transfer on Internet is not always reliable. Two-way backup

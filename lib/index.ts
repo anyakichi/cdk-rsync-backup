@@ -25,6 +25,7 @@ export interface RsyncBackupProps {
   readonly securityGroup?: ec2.ISecurityGroup;
   readonly instanceType?: ec2.InstanceType;
   readonly useEIP?: boolean;
+  readonly swapSize?: number;
 
   readonly logsBucket?: s3.IBucket;
   readonly autoDeleteLogs?: boolean;
@@ -171,6 +172,19 @@ export class RsyncBackup extends Construct {
       "apt-get install -y unzip",
       "snap install aws-cli --classic",
     );
+
+    if (props.swapSize !== undefined) {
+      if (props.swapSize <= 0 || !Number.isInteger(props.swapSize)) {
+        throw new Error("swapSize must be a positive integer");
+      }
+      instance.userData.addCommands(
+        `fallocate -l ${props.swapSize}G /swapfile`,
+        "chmod 600 /swapfile",
+        "mkswap /swapfile",
+        "swapon /swapfile",
+        "echo '/swapfile none swap defaults 0 0' >> /etc/fstab",
+      );
+    }
 
     if (props.useEIP) {
       instance.userData.addCommands(

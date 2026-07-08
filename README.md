@@ -50,9 +50,22 @@ export class CdkDemoStack extends cdk.Stack {
 If no EBS snapshot for `hostname` does not exist, a new EBS volume is
 created on rsync execution with specified `size`.
 
-If an EBS snapshot exist, a new EBS volume is created from the latest
-EBS snapshot. The volume size is depends on the snapshot and `size`
-parameter is ignored.
+If an EBS snapshot exists, a new EBS volume is created from the latest
+EBS snapshot. When the `size` parameter differs from the snapshot
+size:
+
+- Growing: the volume is created with the new size and the filesystem
+  is expanded automatically before receiving data.
+- Shrinking: the backup is received on a volume of the previous size
+  first, so the client never has to wait. After the transfer
+  completes, the data is copied to a new smaller volume in the
+  background and the snapshot is taken from the new volume. If the
+  data does not fit into the new size, shrinking is skipped and the
+  previous size is kept.
+
+Note that `size` is embedded in the instance's authorized_keys at
+first boot. To apply a size change to an existing deployment, replace
+the instance by setting or bumping the `instanceVersion` property.
 
 When you create a new backup, simply execute rsync.
 

@@ -80,6 +80,11 @@ main() {
                 # Grow the volume. The filesystem is expanded with
                 # resize2fs after mount.
                 args+=(--size "$size")
+            elif ((size < snapshot_size)); then
+                # The shrink migration reads the whole volume, which is
+                # painfully slow against lazily-loaded snapshot blocks.
+                # Pay for provisioned-rate initialization instead.
+                args+=(--volume-initialization-rate 100)
             fi
         else
             args+=(--size "$size")

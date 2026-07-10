@@ -28,6 +28,19 @@ prune_snapshots() {
     fi
 }
 
+# New filesystems are XFS, but volumes restored from old snapshots are
+# still ext4 until a shrink migration recreates them.
+grow_filesystem() {
+    local dev="$1"
+    local mnt="$2"
+
+    if [[ $(findmnt -no FSTYPE "$mnt") == xfs ]]; then
+        xfs_growfs "$mnt"
+    else
+        resize2fs "$dev"
+    fi
+}
+
 reclaim_stale_volumes() {
     local name="$1"
     local created snapshot_id snapshot_state snapshot_time v
@@ -157,7 +170,7 @@ main() {
 
         mkdir -p "$mnt"
         if [[ $snapshot_id == None ]]; then
-            mkfs.ext4 -q "$dev"
+            mkfs.xfs -q "$dev"
         fi
         mount "$dev" "$mnt"
     else
@@ -166,7 +179,7 @@ main() {
 
     # Expand the filesystem to the volume size. This is a no-op unless
     # the volume was created larger than the snapshot.
-    resize2fs "$dev" >>"$logfile" 2>&1
+    grow_filesystem "$dev" "$mnt" >>"$logfile" 2>&1
 
     volume_size=$(aws ec2 describe-volumes --volume-ids "$volume_id" \
         --query "Volumes[0].Size" --output text)
@@ -263,7 +276,7 @@ main() {
             sleep 1
         done
 
-        mkfs.ext4 -q "$new_dev"
+        mkfs.xfs -q "$new_dev"
         mkdir -p "$new_mnt"
         mount "$new_dev" "$new_mnt"
 

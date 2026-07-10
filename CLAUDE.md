@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run watch` — `tsc -w` for incremental compilation.
 - `npm run format` — run `sort-package-json` + Prettier over `package.json` and `lib`. Prettier sorts imports (`prettier.config.js`).
 
-Compiled JS/`.d.ts` output is committed alongside the sources in `lib/` (this is the published npm package, `main: lib/index.js`). Run `npm run build` after editing `lib/index.ts` so the shipped `.js` stays in sync.
+Compiled JS/`.d.ts` output is gitignored (`*.js`, `*.d.ts`, `lib/version.ts`); the published npm package (`main: lib/index.js`) is built by the publish workflow (`npm run build` before `npm publish`). Run `npm run build` locally after editing `lib/index.ts` to type-check.
 
 There is no lint step and no CDK app here — this is a library (L3 construct) consumed by other CDK stacks. Publishing is automated: `.github/workflows/publish.yml` runs `npm publish` (npm trusted publishing / OIDC) on GitHub release creation.
 

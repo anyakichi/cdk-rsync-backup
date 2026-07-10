@@ -28,6 +28,43 @@ prune_snapshots() {
     fi
 }
 
+reclaim_stale_volumes() {
+    local name="$1"
+    local created snapshot_id snapshot_state snapshot_time v
+
+    # Volumes are deleted by a disowned background job, so an instance
+    # replacement (or any other kill) can leave them behind detached.
+
+    # A migrating volume is a copy; the source volume, still named
+    # $name, holds the same data. Always safe to delete.
+    for v in $(aws ec2 describe-volumes \
+        --filter "Name=tag:Name,Values=$name-migrating" \
+        "Name=status,Values=available" \
+        --query "Volumes[].VolumeId" --output text); do
+        aws ec2 delete-volume --volume-id "$v"
+    done
+
+    # Reclaim only what a completed snapshot covers. If the newest
+    # snapshot is still pending, a later run picks the volume up.
+    read -r snapshot_id snapshot_state snapshot_time <<<"$(aws ec2 describe-snapshots \
+        --owner-ids self \
+        --filter "Name=tag:Name,Values=$name" \
+        --query "reverse(sort_by(Snapshots,&StartTime))[0].[SnapshotId,State,StartTime]" \
+        --output text)"
+    if [[ $snapshot_id == None || $snapshot_state != completed ]]; then
+        return
+    fi
+
+    while read -r v created; do
+        if [[ -n $v ]] &&
+            (($(date -d "$snapshot_time" +%s) > $(date -d "$created" +%s))); then
+            aws ec2 delete-volume --volume-id "$v"
+        fi
+    done <<<"$(aws ec2 describe-volumes \
+        --filter "Name=tag:Name,Values=$name" "Name=status,Values=available" \
+        --query "Volumes[].[VolumeId,CreateTime]" --output text)"
+}
+
 main() {
     local host="$1"
     local size="$2"
@@ -61,8 +98,15 @@ main() {
     # If volume is not mounted, create and attach a volume and mount it.
     if ! mountpoint -q "$mnt"; then
         if [[ -n $volume_id ]]; then
-            # Data volume already exists.
-            echo backup volume already exists
+            reclaim_stale_volumes "$name"
+            volume_id=$(aws ec2 describe-volumes \
+                --filter "Name=tag:Name,Values=$name" \
+                --query "Volumes[].VolumeId" --output text)
+        fi
+        if [[ -n $volume_id ]]; then
+            # The volume holds data that no snapshot covers yet; keep
+            # it for manual recovery.
+            echo backup volume already exists >&2
             exit 1
         fi
 

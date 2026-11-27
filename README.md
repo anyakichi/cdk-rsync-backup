@@ -92,6 +92,37 @@ snapshot, then copy the backup data.
 
 Reading backup data from the backup instance is disabled by default.
 
+### Snapshot retention
+
+By default, the latest 15 snapshots are kept per module
+(`maxSnapshots`). Alternatively, deleted snapshots can be kept in the
+EBS Recycle Bin for a number of days by specifying
+`recycleBinRetentionDays` (1-365). A Recycle Bin retention rule that
+matches only this construct's snapshots is created, and `maxSnapshots`
+defaults to 1, so older backups live in the Recycle Bin until they
+expire.
+
+```typescript
+const rsyncBackup = new RsyncBackup(this, "RsyncBackup", {
+  recycleBinRetentionDays: 30,
+  modules: [
+    /* ... */
+  ],
+});
+```
+
+A snapshot in the Recycle Bin cannot be used directly. Restore it
+first:
+
+```
+$ aws ec2 list-snapshots-in-recycle-bin
+$ aws ec2 restore-snapshot-from-recycle-bin --snapshot-id snap-XXXXXXXX
+```
+
+Snapshots in the Recycle Bin are billed at the same rate as regular
+snapshots. The instance role cannot purge the Recycle Bin, so deleted
+backups survive even if the instance is compromised.
+
 ### Swap file
 
 Small instance types (e.g. `t4g.nano`) have limited memory and may

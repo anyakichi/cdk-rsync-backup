@@ -11,6 +11,11 @@ AWS_DEFAULT_REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.25
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 INSTANCE_AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
 
+# Value of the rsync-backup tag on volumes and snapshots. It is unique
+# per construct so that a Recycle Bin retention rule only matches this
+# deployment's snapshots.
+RSYNC_BACKUP_TAG=${RSYNC_BACKUP_TAG:-}
+
 prune_snapshots() {
     local name="$1"
     local i
@@ -23,6 +28,10 @@ prune_snapshots() {
             --query "reverse(sort_by(Snapshots,&StartTime))[].SnapshotId" \
             --output text)"
         for ((i = MAX_SNAPSHOTS; i < ${#snapshot_ids[@]}; i++)); do
+            # Snapshots taken before the tag became unique carry an empty
+            # value; retag so a Recycle Bin rule catches the deletion.
+            aws ec2 create-tags --resources "${snapshot_ids[$i]}" \
+                --tags "Key=rsync-backup,Value=$RSYNC_BACKUP_TAG"
             aws ec2 delete-snapshot --snapshot-id "${snapshot_ids[$i]}"
         done
     fi
@@ -148,7 +157,7 @@ main() {
         fi
         volume_id=$(aws ec2 create-volume --availability-zone "$INSTANCE_AZ" \
             --encrypted --volume-type gp3 \
-            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=''}]" \
+            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=$RSYNC_BACKUP_TAG}]" \
             --query VolumeId --output text "${args[@]}")
 
         aws ec2 wait volume-available --volume-ids "$volume_id"
@@ -213,7 +222,7 @@ main() {
 
         snapshot_id=$(aws ec2 create-snapshot --volume-id "$volume_id" \
             --description "$name-$timestamp" \
-            --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=''}]" \
+            --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=$RSYNC_BACKUP_TAG}]" \
             --query SnapshotId --output text)
 
         gzip -c "$logfile" >"$logfile_gz"
@@ -256,7 +265,7 @@ main() {
         new_volume_id=$(aws ec2 create-volume \
             --availability-zone "$INSTANCE_AZ" \
             --encrypted --volume-type gp3 --size "$size" \
-            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=$name-migrating},{Key=rsync-backup,Value=''}]" \
+            --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=$name-migrating},{Key=rsync-backup,Value=$RSYNC_BACKUP_TAG}]" \
             --query VolumeId --output text)
 
         aws ec2 wait volume-available --volume-ids "$new_volume_id"
@@ -295,7 +304,7 @@ main() {
 
         snapshot_id=$(aws ec2 create-snapshot --volume-id "$new_volume_id" \
             --description "$name-$timestamp" \
-            --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=''}]" \
+            --tag-specifications "ResourceType=snapshot,Tags=[{Key=Name,Value=$name},{Key=rsync-backup,Value=$RSYNC_BACKUP_TAG}]" \
             --query SnapshotId --output text)
 
         gzip -c "$logfile" >"$logfile_gz"

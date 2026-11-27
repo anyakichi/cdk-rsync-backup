@@ -27,8 +27,9 @@ Nearly all behavior is wired through **EC2 UserData** built up incrementally in 
 - For each `RsyncBackupModule`, renders a per-module `rsyncd.<name>.conf` (via `sed` on `@host@`) and appends a **forced-command** line to `/root/.ssh/authorized_keys`. That forced command is what pins an incoming SSH/rsync session to `rsync-backup <name> <size> /dev/sd<X>` — the client-supplied rsync command is ignored. Device letters are assigned sequentially from `f` per module index.
 - With no `modules`, a single `backup` module is configured as a fallback.
 
-Two notable optional flags:
+Notable optional flags:
 - `swapSize` — appends `fallocate`/`mkswap`/`swapon` + `/etc/fstab` commands (helps small instance types survive heavy rsync).
+- `recycleBinRetentionDays` — creates an `AWS::Rbin::Rule` for EBS snapshots matching tag `rsync-backup=<node.addr>` (written to `/etc/environment` as `RSYNC_BACKUP_TAG` and applied to every volume/snapshot the script creates; `prune_snapshots` retags before deleting so pre-existing snapshots with the old empty value are caught too). `maxSnapshots` then defaults to 1.
 - `useEIP` — allocates an EIP **and** injects a UserData block that persists SSH host keys to SSM Parameter Store (`/ec2/hostkeys/rsync-backup/*`), so a re-created fixed-IP instance keeps the same host keys.
 
 The instance's CDK logical ID embeds the library version (`Instance-<major.minor>`, optionally `-<instanceVersion>`); bumping it forces instance replacement.

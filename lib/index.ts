@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as rbin from "aws-cdk-lib/aws-rbin";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as s3assets from "aws-cdk-lib/aws-s3-assets";
 import { Construct } from "constructs";
@@ -16,7 +17,20 @@ export interface RsyncBackupModule {
 
 export interface RsyncBackupProps {
   readonly modules?: RsyncBackupModule[];
+  /**
+   * Number of snapshots kept per module. Older ones are deleted.
+   *
+   * @default 1 if `recycleBinRetentionDays` is set, otherwise 15
+   */
   readonly maxSnapshots?: number;
+  /**
+   * Retain deleted snapshots in the Recycle Bin for this many days
+   * (1-365). Creates a Recycle Bin retention rule matching only this
+   * construct's snapshots.
+   *
+   * @default - no Recycle Bin rule
+   */
+  readonly recycleBinRetentionDays?: number;
 
   readonly instanceVersion?: string;
 
@@ -38,9 +52,39 @@ export class RsyncBackup extends Construct {
   constructor(scope: Construct, id: string, props: RsyncBackupProps = {}) {
     super(scope, id);
 
-    const maxSnapshots = props.maxSnapshots || 15;
+    const retentionDays = props.recycleBinRetentionDays;
+    if (
+      retentionDays !== undefined &&
+      (!Number.isInteger(retentionDays) ||
+        retentionDays < 1 ||
+        retentionDays > 365)
+    ) {
+      throw new Error(
+        "recycleBinRetentionDays must be an integer between 1 and 365",
+      );
+    }
+
+    const maxSnapshots =
+      props.maxSnapshots || (retentionDays !== undefined ? 1 : 15);
     if (maxSnapshots < 0 || !Number.isInteger(maxSnapshots)) {
       throw new Error("maxSnapshots must be a positive integer");
+    }
+
+    // Value of the rsync-backup tag on volumes and snapshots, unique per
+    // construct so a Recycle Bin rule does not catch other deployments.
+    const backupTag = this.node.addr;
+    if (retentionDays !== undefined) {
+      new rbin.CfnRule(this, "RecycleBinRule", {
+        description: `rsync-backup snapshots (${this.node.path})`,
+        resourceType: "EBS_SNAPSHOT",
+        resourceTags: [
+          { resourceTagKey: "rsync-backup", resourceTagValue: backupTag },
+        ],
+        retentionPeriod: {
+          retentionPeriodUnit: "DAYS",
+          retentionPeriodValue: retentionDays,
+        },
+      });
     }
 
     const logsBucket =
@@ -230,6 +274,7 @@ systemctl restart ssh
       `rm ${asset_path}`,
       "mv /srv/rsync-backup/rsync-backup.sh /usr/local/bin/rsync-backup",
       `echo MAX_SNAPSHOTS=${maxSnapshots} >> /etc/environment`,
+      `echo RSYNC_BACKUP_TAG=${backupTag} >> /etc/environment`,
       `echo S3_LOGS_BUCKET=${logsBucket.bucketName} >> /etc/environment`,
     );
 

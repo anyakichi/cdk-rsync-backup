@@ -121,7 +121,11 @@ $ aws ec2 restore-snapshot-from-recycle-bin --snapshot-id snap-XXXXXXXX
 
 Snapshots in the Recycle Bin are billed at the same rate as regular
 snapshots. The instance role cannot purge the Recycle Bin, so deleted
-backups survive even if the instance is compromised.
+backups survive even if the instance is compromised. The rule created
+here is tag-level and therefore cannot be locked; to also guard
+against compromised administrator credentials, create and lock a
+Region-level retention rule for EBS snapshots in your account
+separately.
 
 ### Swap file
 
